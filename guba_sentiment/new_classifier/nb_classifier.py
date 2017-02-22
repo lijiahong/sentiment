@@ -355,6 +355,7 @@ def check_test(index):
 
     with open('./3class_result/accuracy_result_%s.csv'%index,'wb')as f:
         writer = csv.writer(f)
+        writer.writerow(['id','p_neg','r_neg','f_neg','p_pos','r_pos','f_pos','p_neu','r_neu','f_neu'])
         for item in check_result:
             writer.writerow((item))
 

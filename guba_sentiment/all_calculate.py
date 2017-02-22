@@ -212,7 +212,13 @@ if __name__ == "__main__":
     date_list = fi.readlines()
     
     all_stocks = db.collection_names()
-    #print all_stocks,len(all_stocks)
+    all_stocks = [i[-6:]+'\n' for i in all_stocks]
+    print len(all_stocks)
+    writer = open('stockids.csv','wb')
+    writer.writelines(all_stocks)
+    writer.close()
+
+    '''
     count = 0
     for name in all_stocks:
         if name[:11] == 'post_stock_':
@@ -223,7 +229,7 @@ if __name__ == "__main__":
             results = 'results/' + unit + '/' + stock + '.csv'
             writer = csv.writer(open(results,'wb'))
             if unit != 'intraday':
-                writer.writerow(['date','股票代码','积极帖子数','消极帖子数','中性帖子数', '原始B','修正B', '中性B'])
+                writer.writerow(['date','stockid','pos','neg','neu', 'bt','bs', 'bz'])
                 for i in range(1, len(date_list)):
                     yesterday = date_list[i-1][:10]
                     today = date_list[i][:10]
@@ -238,8 +244,8 @@ if __name__ == "__main__":
                     all_bz = emotion_list[5]
                     writer.writerow([today, stock, all_pos, all_neg, all_neu, all_bt, all_bs, all_bz])
             else:
-                writer.writerow(['date','股票代码','交易时段积极帖子数','交易时段消极帖子数','交易时段中性帖子数','交易时段原始B','交易时段修正B','交易时段中性B', \
-                             '非交易时段积极帖子数', '非交易时段消极帖子数','非交易时段中性帖子数', '非交易时段原始B', '非交易时段修正B', '非交易时段中性B'])
+                writer.writerow(['date','stockid','on_pos','on_neg','on_neu','on_bt','on_bs','on_bz', \
+                             'off_pos', 'off_neg','off_neu', 'off_bt', 'off_bs', 'off_bz'])
                 for i in range(1, len(date_list)):
                     yesterday = date_list[i-1][:10]
                     today = date_list[i][:10]
@@ -265,3 +271,4 @@ if __name__ == "__main__":
             #break
         else:
             continue
+    '''
