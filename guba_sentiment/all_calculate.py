@@ -79,6 +79,7 @@ def calculate_bm(start_date,end_date):
     '''
     all_pos = all_neg = all_neu = 0
     #stock_dict = {}
+    count = 1
     
     for stocksid in stocks300:
         #count_pos, count_neg, count_neu = sentiment_count(stocksid, start_date, end_date)
@@ -87,7 +88,7 @@ def calculate_bm(start_date,end_date):
         count_neg = account_find(stocksid,0,start_date,end_date)
         count_neu = account_find(stocksid,2,start_date,end_date)
         
-        #print stocksid, count_pos, count_neg, count_neu
+        #print count, stocksid, count_pos, count_neg, count_neu
         '''
         index_bt = calculate_bt(count_pos,count_neg)
         index_bs = calculate_bs(index_bt,count_pos,count_neg)
@@ -98,6 +99,7 @@ def calculate_bm(start_date,end_date):
         all_pos = all_pos + count_pos
         all_neg = all_neg + count_neg
         all_neu = all_neu + count_neu
+        count += 1
     
     #计算和保存34支股票、沪深300股票的bt,bs值
     all_bt = calculate_bt(all_pos, all_neg)
@@ -206,69 +208,131 @@ def old_work():
 hs300_list = ['20081215', '20090615', '20091214', '20100614','20101213','20110613', '20111212', '20120611', '20121217', '20130617', '20131216', '20140616']
 '''
 if __name__ == "__main__":
-    unit = 'intraday'
+    unit = 'month'
     name = 'cal_date/' + unit + 's.csv'
     fi = open(name)
     date_list = fi.readlines()
-    
+   
+    all_stocks = get_stocks300('stockids.csv')
+    '''
     all_stocks = db.collection_names()
     all_stocks = [i[-6:]+'\n' for i in all_stocks]
     print len(all_stocks)
     writer = open('stockids.csv','wb')
     writer.writelines(all_stocks)
     writer.close()
-
     '''
+    results = 'results/' + unit + '.csv'
+    writer = csv.writer(open(results,'wb'))
     count = 0
-    for name in all_stocks:
-        if name[:11] == 'post_stock_':
-            count += 1
-            stock = name[11:] 
-            stocks300 = [stock]
-            print 'start calculating', count, stock
-            results = 'results/' + unit + '/' + stock + '.csv'
-            writer = csv.writer(open(results,'wb'))
-            if unit != 'intraday':
-                writer.writerow(['date','stockid','pos','neg','neu', 'bt','bs', 'bz'])
-                for i in range(1, len(date_list)):
-                    yesterday = date_list[i-1][:10]
-                    today = date_list[i][:10]
-                       
-                    emotion_list = emotion(yesterday, today) #计算当日各股情感指数
-                    #print today, emotion_list
-                    all_pos = emotion_list[0]
-                    all_neg = emotion_list[1]
-                    all_neu = emotion_list[2]
-                    all_bt = emotion_list[3]
-                    all_bs = emotion_list[4]
-                    all_bz = emotion_list[5]
-                    writer.writerow([today, stock, all_pos, all_neg, all_neu, all_bt, all_bs, all_bz])
-            else:
-                writer.writerow(['date','stockid','on_pos','on_neg','on_neu','on_bt','on_bs','on_bz', \
-                             'off_pos', 'off_neg','off_neu', 'off_bt', 'off_bs', 'off_bz'])
-                for i in range(1, len(date_list)):
-                    yesterday = date_list[i-1][:10]
-                    today = date_list[i][:10]
-
-                    emotion_dict = today_emotion(yesterday, today) #计算当日各股情感指数
-                    #print today, emotion_dict
-                    on_emotion_list = emotion_dict['on']
-                    on_all_pos = on_emotion_list[0]
-                    on_all_neg = on_emotion_list[1]
-                    on_all_neu = on_emotion_list[2]
-                    on_all_bt = on_emotion_list[3]
-                    on_all_bs = on_emotion_list[4]
-                    on_all_bz = on_emotion_list[5]
-                    off_emotion_list = emotion_dict['off']
-                    off_all_pos = off_emotion_list[0]
-                    off_all_neg = off_emotion_list[1]
-                    off_all_neu = off_emotion_list[2]
-                    off_all_bt = off_emotion_list[3]
-                    off_all_bs = off_emotion_list[4]
-                    off_all_bz = off_emotion_list[5]
-                    writer.writerow([today, stock, on_all_pos, on_all_neg, on_all_neu, on_all_bt, on_all_bs, on_all_bz, off_all_pos, off_all_neg, off_all_neu, off_all_bt, off_all_bs, off_all_bz])
-    
-            #break
-        else:
-            continue
+    if unit != 'intraday':
+        writer.writerow(['date','pos','neg','neu', 'bt','bs', 'bz'])
+        for i in range(1, len(date_list)):
+            yesterday = date_list[i-1][:10]
+            today = date_list[i][:10]
+            print today
+            sum_pos = sum_neg = sum_neu = sum_bt = sum_bs = sum_bz = 0
+            for stock in all_stocks:
+                stocks300 = [stock]
+                #print today,stocks300
+                emotion_list = emotion(yesterday, today) #计算当日各股情感指数
+                #print today, emotion_list
+                all_pos = emotion_list[0]
+                all_neg = emotion_list[1]
+                all_neu = emotion_list[2]
+                all_bt = emotion_list[3]
+                all_bs = emotion_list[4]
+                all_bz = emotion_list[5]
+                sum_pos += all_pos
+                sum_neg += all_neg
+                sum_neu += all_neu
+            sum_bt = calculate_bt(sum_pos, sum_neg)
+            sum_bs = calculate_bs(sum_bt, sum_pos, sum_neg)
+            sum_bz = calculate_bz(sum_bt, sum_pos, sum_neg, sum_neu)
+            writer.writerow([today, all_pos, all_neg, all_neu, all_bt, all_bs, all_bz])
+    else:
+        writer.writerow(['date','on_pos','on_neg','on_neu','on_bt','on_bs','on_bz', \
+                     'off_pos', 'off_neg','off_neu', 'off_bt', 'off_bs', 'off_bz'])
+        for i in range(1, len(date_list)):
+            yesterday = date_list[i-1][:10]
+            today = date_list[i][:10]
+            print today
+            on_sum_pos = on_sum_neg = on_sum_neu = on_sum_bt = on_sum_bs = on_sum_bz = 0
+            off_sum_pos = off_sum_neg = off_sum_neu = off_sum_bt = off_sum_bs = off_sum_bz = 0
+            for stock in all_stocks:
+                stocks300 = [stock]
+                print today,stocks300
+                emotion_dict = today_emotion(yesterday, today) #计算当日各股情感指数
+                #print today, emotion_dict
+                on_emotion_list = emotion_dict['on']
+                on_all_pos = on_emotion_list[0]
+                on_all_neg = on_emotion_list[1]
+                on_all_neu = on_emotion_list[2]
+                on_all_bt = on_emotion_list[3]
+                on_all_bs = on_emotion_list[4]
+                on_all_bz = on_emotion_list[5]
+                off_emotion_list = emotion_dict['off']
+                off_all_pos = off_emotion_list[0]
+                off_all_neg = off_emotion_list[1]
+                off_all_neu = off_emotion_list[2]
+                off_all_bt = off_emotion_list[3]
+                off_all_bs = off_emotion_list[4]
+                off_all_bz = off_emotion_list[5]
+                on_sum_pos += on_all_pos
+                on_sum_neg += on_all_neg
+                on_sum_neu += on_all_neu
+                off_sum_pos += off_all_pos
+                off_sum_neg += off_all_neg
+                off_sum_neu += off_all_neu
+            on_sum_bt = calculate_bt(on_sum_pos, on_sum_neg)
+            on_sum_bs = calculate_bs(on_sum_bt, on_sum_pos, on_sum_neg)
+            on_sum_bz = calculate_bz(on_sum_bt, on_sum_pos, on_sum_neg, on_sum_neu)
+            off_sum_bt = calculate_bt(off_sum_pos, off_sum_neg)
+            off_sum_bs = calculate_bs(off_sum_bt, off_sum_pos, off_sum_neg)
+            off_sum_bz = calculate_bz(off_sum_bt, off_sum_pos, off_sum_neg, off_sum_neu)
+            writer.writerow([today, on_all_pos, on_all_neg, on_all_neu, on_all_bt, on_all_bs, on_all_bz, off_all_pos, off_all_neg, off_all_neu, off_all_bt, off_all_bs, off_all_bz])
     '''
+    for stock in all_stocks:
+        count += 1
+        stocks300 = [stock]
+        print 'start calculating', count, stock
+        if unit != 'intraday':
+            #writer.writerow(['date','stockid','pos','neg','neu', 'bt','bs', 'bz'])
+            for i in range(1, len(date_list)):
+                yesterday = date_list[i-1][:10]
+                today = date_list[i][:10]
+                   
+                emotion_list = emotion(yesterday, today) #计算当日各股情感指数
+                #print today, emotion_list
+                all_pos = emotion_list[0]
+                all_neg = emotion_list[1]
+                all_neu = emotion_list[2]
+                all_bt = emotion_list[3]
+                all_bs = emotion_list[4]
+                all_bz = emotion_list[5]
+                #writer.writerow([today, stock, all_pos, all_neg, all_neu, all_bt, all_bs, all_bz])
+        else:
+            #writer.writerow(['date','stockid','on_pos','on_neg','on_neu','on_bt','on_bs','on_bz', \
+            #             'off_pos', 'off_neg','off_neu', 'off_bt', 'off_bs', 'off_bz'])
+            for i in range(1, len(date_list)):
+                yesterday = date_list[i-1][:10]
+                today = date_list[i][:10]
+                emotion_dict = today_emotion(yesterday, today) #计算当日各股情感指数
+                #print today, emotion_dict
+                on_emotion_list = emotion_dict['on']
+                on_all_pos = on_emotion_list[0]
+                on_all_neg = on_emotion_list[1]
+                on_all_neu = on_emotion_list[2]
+                on_all_bt = on_emotion_list[3]
+                on_all_bs = on_emotion_list[4]
+                on_all_bz = on_emotion_list[5]
+                off_emotion_list = emotion_dict['off']
+                off_all_pos = off_emotion_list[0]
+                off_all_neg = off_emotion_list[1]
+                off_all_neu = off_emotion_list[2]
+                off_all_bt = off_emotion_list[3]
+                off_all_bs = off_emotion_list[4]
+                off_all_bz = off_emotion_list[5]
+                #writer.writerow([today, stock, on_all_pos, on_all_neg, on_all_neu, on_all_bt, on_all_bs, on_all_bz, off_all_pos, off_all_neg, off_all_neu, off_all_bt, off_all_bs, off_all_bz])
+        #break
+        '''
