@@ -138,7 +138,7 @@ def train_freq():
 
     #参数列表
     para_list = [f_neg,f_neu,f_p,negative_total,negative_word_count,neutral_total,neutral_word_count,positive_total,positive_word_count,total,dic_len]
-    
+    print para_list
     return para_list
 
 def under_sampling():
@@ -176,6 +176,26 @@ def under_sampling():
     
 
 sw = load_scws()
+def freq_doc(data):
+    '''
+    统计指定数据下词及出现的文档数
+    '''
+    black = load_black_words()
+    addition = [u'!',u'如何',u'怎么',u'什么']
+    word_list = []
+    for i in range(len(data)):
+        text = data[i][1] + '***' + data[i][2]
+        words = sw.participle(text)
+        all_words = [term for term,cx in words if cx in cx_dict and (3<len(term)<30 or term in single_word_whitelist) and (term not in black)]
+        all_words_single = list(set(all_words))    #去重
+        word_list.extend(all_words_single)
+    word_list.extend(addition)
+    
+    counter = Counter(word_list)
+    #freq_word = {k:v for k,v in counter.most_common() if v>=3}
+    freq_word = {k:v for k,v in counter.most_common()}
+    
+    return freq_word
 
 def freq_word(data):
     '''
@@ -211,9 +231,85 @@ def word_count(f_neg,f_neu,f_p):
     dic = f_neg.keys()
     dic.extend(f_neu.keys())
     dic.extend(f_p.keys())
-    dic_len = len(set(dic))
+    all_dict = list(set(dic))
+    dic_len = len(all_dict)
 
-    return negative_total,negative_word_count,neutral_total,neutral_word_count,positive_total,positive_word_count,total,dic_len
+    return negative_total,negative_word_count,neutral_total,neutral_word_count,positive_total,positive_word_count,total,dic_len,all_dict
+
+def naivebayes_v2(post, para_list):
+    '''
+    朴素贝叶斯三类分类器(bernoulli)
+    '''
+    #print post['em_info']
+    #计算三类先验概率
+    p_negative = float(para_list[3])/float(para_list[6])
+    p_neutral = float(para_list[4])/float(para_list[6])
+    p_positive = float(para_list[5])/float(para_list[6])
+    #label = []#分类后类别标签列表
+    info_type = [u'数据',u'新闻',u'研报',u'公告']
+    addition_w = [u'如何',u'怎么',u'什么']
+    #如果记录的em_info字段为数据、新闻、研报、公告，则直接将该条记录归为中性类
+    if (post['em_info']!=None) and (post['em_info'].decode("utf8") in info_type):
+        #label.append('2')
+        label = 2
+    else:
+        flag = {}
+        all_dict = para_list[7]
+        for term in all_dict:
+            flag[term] = False
+        text = post['content']+'***'+post['title']
+        try:
+            words = sw.participle(text)
+            for word in words:
+                if word[0] in flag:
+                    flag[word[0]] = True
+            p_neg = 0
+            p_neu = 0
+            p_p = 0
+            prob = []
+            for word in flag:
+                if word in para_list[0]:
+                    p_w_neg = (float(para_list[0][word])+1)/(float(para_list[3])+float(para_list[6]))
+                else:
+                    p_w_neg = 1.0/(float(para_list[3])+float(para_list[6]))
+                
+                if word in para_list[1]:
+                    p_w_neu = (float(para_list[1][word])+1)/(float(para_list[4])+float(para_list[6]))
+                else:
+                    p_w_neu = 1.0/(float(para_list[4])+float(para_list[6]))
+                
+                if word in para_list[2]:
+                    p_w_pos = (float(para_list[2][word])+1)/(float(para_list[5])+float(para_list[6]))
+                else:
+                    p_w_pos = 1.0/(float(para_list[5])+float(para_list[6]))
+                
+                if flag[word]:
+                    p_neg = p_neg + math.log(p_w_neg)
+                    p_neu = p_neu + math.log(p_w_neu)
+                    p_p = p_p + math.log(p_w_pos)
+                else:
+                    p_neg = p_neg + math.log(1.0-p_w_neg)
+                    p_neu = p_neu + math.log(1.0-p_w_neu)
+                    p_p = p_p + math.log(1.0-p_w_pos)
+
+            prob_neg = math.log(p_negative) + p_neg
+            prob_neu = math.log(p_neutral) + p_neu
+            prob_p = math.log(p_positive) + p_p
+            if prob_neg == prob_neu and prob_neg == prob_p:
+                #label.append(2)
+                label = 2
+            else:
+                prob.append(prob_neg)
+                prob.append(prob_p)
+                prob.append(prob_neu)
+                #print prob
+                #label.append(str(prob.index(max(prob))))
+                label = prob.index(max(prob))
+        except:
+            #label.append(2)      
+            label = 2      
+    #print label,prob_neg,prob_neu,prob_p
+    return label
 
 def naivebayes(post, para_list):
     '''
@@ -224,7 +320,6 @@ def naivebayes(post, para_list):
     p_negative = float(para_list[3])/float(para_list[9])
     p_neutral = float(para_list[5])/float(para_list[9])
     p_positive = float(para_list[7])/float(para_list[9])
-
     #label = []#分类后类别标签列表
     info_type = [u'数据',u'新闻',u'研报',u'公告']
     addition_w = [u'如何',u'怎么',u'什么']
@@ -282,7 +377,7 @@ def multi_naivebayes(para_list, test_data):
     label_list = []
     for item in test_data:
         post = {'content':item[1], 'title':item[2], 'em_info':item[3]}
-        label = naivebayes(post, para_list)
+        label = naivebayes_v2(post, para_list)
         label_list.append(label)
     return label_list
 
@@ -295,7 +390,7 @@ def check_test(index):
     inputs.extend(train_neg)
     inputs.extend(train_neu)
     inputs.extend(train_p)
-
+    
     data = []
     FOLDS_NUM = 5
     for i in range(FOLDS_NUM):
@@ -317,28 +412,39 @@ def check_test(index):
             if (i == j):
                 test_data = data[j]
             else:
-		    	train_data.extend(data[j])
-		    	for item in data[j]:
-		    		if item[5] == '0':
-		    			new_neg.append(item)
-		    		elif item[5] == '1':
-		    			new_pos.append(item)
-		    		else:
-		    			new_neu.append(item)
+		train_data.extend(data[j])
+		for item in data[j]:
+		    if item[5] == '0':
+		    	new_neg.append(item)
+		    elif item[5] == '1':
+		    	new_pos.append(item)
+		    else:
+		    	new_neu.append(item)
             test_flag = [item[5] for item in test_data]
             train_flag = [item[5] for item in train_data]
         
         #训练模型
         #三类等比例抽取训练样本
+        
         print len(new_neg), len(new_neu), len(new_pos)
+        n_neg = len(new_neg)
+        n_neu = len(new_neu)
+        n_pos = len(new_pos)
+        n_total = n_neg + n_neu + n_pos
+        f_neg = freq_doc(new_neg)
+        f_neu = freq_doc(new_neu)
+        f_p = freq_doc(new_pos)
+        
+        '''
         f_neg = freq_word(new_neg)
         f_neu = freq_word(new_neu)
         f_p = freq_word(new_pos)
-
-        negative_total,negative_word_count,neutral_total,neutral_word_count,positive_total,positive_word_count,total,dic_len=word_count(f_neg,f_neu,f_p)
-        para_list = [f_neg,f_neu,f_p,negative_total,negative_word_count,neutral_total,neutral_word_count,positive_total,positive_word_count,total,dic_len]
+        '''
+        negative_total,negative_word_count,neutral_total,neutral_word_count,positive_total,positive_word_count,total,dic_len,all_dict=word_count(f_neg,f_neu,f_p)
+        #para_list = [f_neg,f_neu,f_p,negative_total,negative_word_count,neutral_total,neutral_word_count,positive_total,positive_word_count,total,dic_len]
+        para_list = [f_neg, f_neu, f_p, n_neg, n_neu, n_pos, n_total, all_dict]
         result_lable = multi_naivebayes(para_list,test_data)
-
+        print para_list
         #交叉检验
         p_neg,r_neg,f_neg,p_pos,r_pos,f_pos,p_neu,r_neu,f_neu = check(test_flag,result_lable)
         check_result.append([i,p_neg,r_neg,f_neg,p_pos,r_pos,f_pos,p_neu,r_neu,f_neu])
@@ -351,7 +457,9 @@ def check_test(index):
             writer = csv.writer(f)
             for j in range(len(test_data)):
                 row = test_data[j]
-                writer.writerow((row))
+                res = list(row)
+                res.append(result_lable[j])
+                writer.writerow(res)
 
     with open('./3class_result/accuracy_result_%s.csv'%index,'wb')as f:
         writer = csv.writer(f)
