@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-#multinomial naivebayes
+# Bernoulli naivebayes
+
 import os
 import re
 import scws
@@ -177,10 +178,9 @@ def under_sampling():
     
 
 sw = load_scws()
-
-def freq_word(data):
+def freq_doc(data):
     '''
-    统计指定数据下词及词频
+    统计指定数据下词及出现的文档数
     '''
     black = load_black_words()
     addition = [u'!',u'如何',u'怎么',u'什么']
@@ -188,7 +188,9 @@ def freq_word(data):
     for i in range(len(data)):
         text = data[i][1] + '***' + data[i][2]
         words = sw.participle(text)
-        word_list.extend([term for term,cx in words if cx in cx_dict and (3<len(term)<30 or term in single_word_whitelist) and (term not in black)])
+        all_words = [term for term,cx in words if cx in cx_dict and (3<len(term)<30 or term in single_word_whitelist) and (term not in black)]
+        all_words_single = list(set(all_words))    #去重
+        word_list.extend(all_words_single)
     word_list.extend(addition)
     
     counter = Counter(word_list)
@@ -217,15 +219,15 @@ def word_count(f_neg,f_neu,f_p):
 
     return negative_total,negative_word_count,neutral_total,neutral_word_count,positive_total,positive_word_count,total,dic_len,all_dict
 
-def naivebayes(post, para_list):
+def naivebayes_v2(post, para_list):
     '''
-    朴素贝叶斯三类分类器
+    朴素贝叶斯三类分类器(bernoulli)
     '''
     #print post['em_info']
     #计算三类先验概率
-    p_negative = float(para_list[3])/float(para_list[9])
-    p_neutral = float(para_list[5])/float(para_list[9])
-    p_positive = float(para_list[7])/float(para_list[9])
+    p_negative = float(para_list[3])/float(para_list[6])
+    p_neutral = float(para_list[4])/float(para_list[6])
+    p_positive = float(para_list[5])/float(para_list[6])
     #label = []#分类后类别标签列表
     info_type = [u'数据',u'新闻',u'研报',u'公告']
     addition_w = [u'如何',u'怎么',u'什么']
@@ -234,35 +236,47 @@ def naivebayes(post, para_list):
         #label.append('2')
         label = 2
     else:
+        flag = {}
+        all_dict = para_list[7]
+        for term in all_dict:
+            flag[term] = False
         text = post['content']+'***'+post['title']
         try:
             words = sw.participle(text)
+            for word in words:
+                if word[0] in flag:
+                    flag[word[0]] = True
             p_neg = 1
             p_neu = 1
             p_p = 1
             prob = []
-            for word in words:
-                if word[0] in para_list[0]:
-                    p_w_neg = (float(para_list[0][word[0]])+1)/(float(para_list[3])+float(para_list[10]))
+            for word in flag:
+                if word in para_list[0]:
+                    p_w_neg = (float(para_list[0][word])+1)/(float(para_list[3])+float(para_list[6]))
                 else:
-                    p_w_neg = 1.0/(float(para_list[3])+float(para_list[10]))
-                p_neg = p_neg * p_w_neg
-
-                if word[0] in para_list[1]:
-                    p_w_neu = (float(para_list[1][word[0]])+1)/(float(para_list[5])+float(para_list[10]))
+                    p_w_neg = 1.0/(float(para_list[3])+float(para_list[6]))
+                
+                if word in para_list[1]:
+                    p_w_neu = (float(para_list[1][word])+1)/(float(para_list[4])+float(para_list[6]))
                 else:
-                    p_w_neu = 1.0/(float(para_list[5])+float(para_list[10]))
-                p_neu = p_neu*p_w_neu
-
-                if word[0] in para_list[2]:
-                    p_w_p = (float(para_list[2][word[0]])+1)/(float(para_list[7])+float(para_list[10]))
+                    p_w_neu = 1.0/(float(para_list[4])+float(para_list[6]))
+                
+                if word in para_list[2]:
+                    p_w_pos = (float(para_list[2][word])+1)/(float(para_list[5])+float(para_list[6]))
                 else:
-                    p_w_p = 1.0/(float(para_list[7])+float(para_list[10]))
-                p_p = p_p * p_w_p
-
-            prob_neg = p_negative * p_neg
-            prob_neu = p_neutral * p_neu
-            prob_p = p_positive * p_p
+                    p_w_pos = 1.0/(float(para_list[5])+float(para_list[6]))
+                
+                if flag[word]:
+                    p_neg = p_neg + math.log(p_w_neg)
+                    p_neu = p_neu + math.log(p_w_neu)
+                    p_p = p_p + math.log(p_w_pos)
+                else:
+                    p_neg = p_neg + math.log(1.0-p_w_neg)
+                    p_neu = p_neu + math.log(1.0-p_w_neu)
+                    p_p = p_p + math.log(1.0-p_w_pos)
+            prob_neg = math.log(p_negative) + p_neg
+            prob_neu = math.log(p_neutral) + p_neu
+            prob_p = math.log(p_positive) + p_p
             if prob_neg == prob_neu and prob_neg == prob_p:
                 #label.append(2)
                 label = 2
@@ -283,7 +297,7 @@ def multi_naivebayes(para_list, test_data):
     label_list = []
     for item in test_data:
         post = {'content':item[1], 'title':item[2], 'em_info':item[3]}
-        label = naivebayes(post, para_list)
+        label = naivebayes_v2(post, para_list)
         label_list.append(label)
     return label_list
 
@@ -333,11 +347,17 @@ def check_test(index):
         #三类等比例抽取训练样本
         
         print len(new_neg), len(new_neu), len(new_pos)
-        f_neg = freq_word(new_neg)
-        f_neu = freq_word(new_neu)
-        f_p = freq_word(new_pos)
+        n_neg = len(new_neg)
+        n_neu = len(new_neu)
+        n_pos = len(new_pos)
+        n_total = n_neg + n_neu + n_pos
+        f_neg = freq_doc(new_neg)
+        f_neu = freq_doc(new_neu)
+        f_p = freq_doc(new_pos)
+        
         negative_total,negative_word_count,neutral_total,neutral_word_count,positive_total,positive_word_count,total,dic_len,all_dict=word_count(f_neg,f_neu,f_p)
-        para_list = [f_neg,f_neu,f_p,negative_total,negative_word_count,neutral_total,neutral_word_count,positive_total,positive_word_count,total,dic_len]
+        #para_list = [f_neg,f_neu,f_p,negative_total,negative_word_count,neutral_total,neutral_word_count,positive_total,positive_word_count,total,dic_len]
+        para_list = [f_neg, f_neu, f_p, n_neg, n_neu, n_pos, n_total, all_dict]
         result_lable = multi_naivebayes(para_list,test_data)
         #print para_list
         #交叉检验
